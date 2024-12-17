@@ -1,0 +1,41 @@
+Import groovy.json.JsonSlurperClassic
+
+pipeline {
+    agent any
+    environment {
+        // Salesforce CLI Authentication for different environments
+        SFDX_AUTH_URL_QA = credentials('sfdx-auth-qa')    // Salesforce org for QA
+        SFDX_AUTH_URL_DEV = credentials('sfdx-auth-dev')   // Salesforce org for DEV
+        SFDX_AUTH_URL_PROD = credentials('sfdx-auth-prod')  // Salesforce org for Production
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                // Checkout code from the branch (PR branch)
+                checkout scm
+                bat "git fetch --all" // Ensure all remotes are fetched
+            }
+        }
+    stage('Identify Delta Changes') {
+            steps {
+                script {
+                    echo "Identifying delta changes between the last pushed commit on 'qa' branch and the new commit"
+
+                    // Fetch all branches to ensure local refs are up-to-date
+                    bat "git fetch origin"
+
+                    // Get the latest commit hash of the `qa` branch
+                    def qaLastCommit = bat(script: 'git rev-parse origin/qa', returnStdout: true).trim()
+                    echo "Last pushed commit on 'qa' branch: ${qaLastCommit}"
+
+                    // Calculate the diff between the latest `qa` branch commit and the current HEAD
+                    def changedFiles = bat(script: "git diff --name-only ${qaLastCommit} HEAD", returnStdout: true).trim().split("\r\n")
+                    echo "Changed files since last commit on 'qa' branch: ${changedFiles}"
+
+                    // Store the changed files as an environment variable for later stages
+                    env.CHANGED_FILES = changedFiles.join(" ")
+                }
+            }
+        }
+    }        
+}    
